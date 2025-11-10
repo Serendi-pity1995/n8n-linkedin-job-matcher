@@ -16,7 +16,7 @@ It:
 
 ## 🧠 Components
 - Google Drive (to download your resume)
-- Google Sheets (for job filters and results)
+- Google Sheets (for job filters and results). You can use this [template spreadsheet](https://docs.google.com/spreadsheets/d/10V_2mwCetqVRULSMRfxnp5B2neqIeVMPJC-CeBXWms4/edit?usp=sharing) to get started.
 - DeepSeek Chat Model (for AI scoring)
 - Gmail (for daily summary)
 - HTML extractors (for LinkedIn scraping)
@@ -30,7 +30,7 @@ It:
    - Google Sheet links
    - Gmail recipient address
    - DeepSeek credentials
-3. **Execute Workflow**
+3. Execute Workflow
 
 ---
 
