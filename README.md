@@ -5,6 +5,8 @@ Automated LinkedIn job-matching workflow using n8n + DeepSeek
 
 This is an automated **LinkedIn job-matching workflow** built in [n8n](https://n8n.io).
 
+<img width="2232" height="530" alt="n8n-linkedin-job-matcher-workflow " src="https://github.com/user-attachments/assets/5ab94fbe-370d-498c-8caf-0b223a56a95a" />
+
 It:
 - Fetches your latest LinkedIn job listings (via HTML extraction)
 - Parses your resume (PDF → text)
