@@ -1,0 +1,913 @@
+{
+  "name": "Linkedin Job Search with Deepseek v1.0",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a helpful job matcher.\n\nYou will receive a list of job postings in JSON format under the key \"allRows\", and the user's resume text.\n\nYour task:\n1. For each job in \"allRows\", read and analyze:\n   - Title\n   - Company\n   - description\n   - Link\n2. Compare each job with the user's resume.\n3. Give a match score from 0–100 where:\n   - 80–100 → high match \n   - 50–79 → medium match \n   - 0–49 → low match \n\nReturn only a valid JSON array，the output must have this structure:\n[\n  {\n    \"job_title\": \"\",\n    \"link\": \"\",\n    \"score\": \n  },\n  {\n    \"job_title\": \"\",\n    \"link\": \"\",\n    \"score\": \n  }\n]\n---\nHere is your input:\njobs_json: {{ JSON.stringify($json.allRows) }}\nmy_resume: {{ $('Parse Resume (PDF → Text)').first().json.text }}\n",
+        "options": {}
+      },
+      "id": "REDACTED",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        2848,
+        128
+      ],
+      "typeVersion": 2,
+      "executeOnce": false,
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "amount": 1
+      },
+      "id": "REDACTED",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "position": [
+        1952,
+        452
+      ],
+      "webhookId": "REDACTED",
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 21,
+              "triggerAtMinute": 16
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -288,
+        452
+      ],
+      "id": "REDACTED",
+      "name": "Schedule Trigger",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatDeepSeek",
+      "typeVersion": 1,
+      "position": [
+        2920,
+        352
+      ],
+      "id": "REDACTED",
+      "name": "DeepSeek Chat Model",
+      "credentials": {
+        "deepSeekApi": {
+          "id": "REDACTED",
+          "name": "DeepSeek account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "links",
+        "options": {}
+      },
+      "id": "REDACTED",
+      "name": "Split Out",
+      "type": "n8n-nodes-base.splitOut",
+      "position": [
+        1280,
+        452
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": "REDACTED_URL",
+        "options": {}
+      },
+      "id": "REDACTED",
+      "name": "Download Resume (from Google Drive)",
+      "type": "n8n-nodes-base.googleDrive",
+      "position": [
+        -64,
+        452
+      ],
+      "typeVersion": 3,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "REDACTED",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "REDACTED",
+      "name": "Parse Resume (PDF → Text)",
+      "type": "n8n-nodes-base.extractFromFile",
+      "position": [
+        160,
+        452
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "documentId": "REDACTED_URL",
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Filter",
+          "cachedResultUrl": "REDACTED_URL"
+        },
+        "options": {}
+      },
+      "id": "REDACTED",
+      "name": "Read Filters (from Google Sheet)",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        384,
+        452
+      ],
+      "typeVersion": 4.6,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REDACTED",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {}
+      },
+      "id": "REDACTED",
+      "name": "Fetch LinkedIn Job Listings",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        832,
+        452
+      ],
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Base URL for LinkedIn job search (past 24 hours)\nconst baseUrl = \"https://www.linkedin.com/jobs/search/?f_TPR=r86400\";\n\n// Get all input items\nconst items = $input.all();\n\n// Array to store the final output results\nconst results = [];\n\nfor (const item of items) {\n  let url = baseUrl;\n\n  const keyword = item.json.Keyword || \"\";\n  const location = item.json.Location || \"\";\n  const experienceLevel = item.json[\"Experience Level\"] || \"\";\n  const remote = item.json.Remote || \"\";\n  const jobType = item.json[\"Job Type\"] || \"\";\n  const easyApply = item.json[\"Easy Apply\"] || \"\";\n  const distance = item.json[\"Distance (km)\"] || \"\"; // ✅ Added Distance field\n\n  // Add keyword parameter\n  if (keyword) {\n    url += `&keywords=${encodeURIComponent(keyword)}`;\n  }\n\n  // Add location parameter\n  if (location) {\n    url += `&location=${encodeURIComponent(location)}`;\n  }\n\n  // ✅ Add distance parameter\n  if (distance) {\n    url += `&distance=${encodeURIComponent(distance)}`;\n  }\n\n  // Add experience level filter\n  if (experienceLevel) {\n    const transformedExperiences = experienceLevel\n      .split(\",\")\n      .map((exp) => {\n        switch (exp.trim()) {\n          case \"Internship\":\n            return \"1\";\n          case \"Entry level\":\n            return \"2\";\n          case \"Associate\":\n            return \"3\";\n          case \"Mid-Senior level\":\n            return \"4\";\n          case \"Director\":\n            return \"5\";\n          case \"Executive\":\n            return \"6\";\n          default:\n            return \"\";\n        }\n      })\n      .filter(Boolean);\n    url += `&f_E=${transformedExperiences.join(\",\")}`;\n  }\n\n  // Add remote work type filter\n  if (remote) {\n    const transformedRemote = remote\n      .split(\",\")\n      .map((e) => {\n        switch (e.trim()) {\n          case \"Remote\":\n            return \"2\";\n          case \"Hybrid\":\n            return \"3\";\n          case \"On-Site\":\n            return \"1\";\n          default:\n            return \"\";\n        }\n      })\n      .filter(Boolean);\n    url += `&f_WT=${transformedRemote.join(\",\")}`;\n  }\n\n  // Add job type filter\n  if (jobType) {\n    const transformedJobType = jobType\n      .split(\",\")\n      .map((type) => type.trim().charAt(0).toUpperCase());\n    url += `&f_JT=${transformedJobType.join(\",\")}`;\n  }\n\n  // Add Easy Apply filter\n  if (easyApply === true || easyApply === \"true\") {\n    url += \"&f_EA=true\";\n  }\n\n  // Save result to output array\n  results.push({ json: { url } });\n}\n\n// Return all generated URLs\nreturn results;\n"
+      },
+      "id": "REDACTED",
+      "name": "Build LinkedIn Search Query",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        608,
+        452
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "links",
+              "cssSelector": "ul.jobs-search__results-list li div a[class*=\"base-card\"]",
+              "returnValue": "attribute",
+              "attribute": "href",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "REDACTED",
+      "name": "Extract Job URLs",
+      "type": "n8n-nodes-base.html",
+      "position": [
+        1056,
+        452
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "jsCode": "// inputItems are the data passed from n8n, usually obtained via $input.all()\nconst inputItems = $input.all();\n\n// Create an empty array to store the final deduplicated data\nconst uniqueLinks = [];\n\n// Use a Set to keep track of links that have already appeared\nconst seen = new Set();\n\n// Iterate over each input element\nfor (const item of inputItems) {\n    const link = item.json.links; // Get the 'links' field from each object\n    if (!seen.has(link)) {        // If the Set does not contain this link yet\n        seen.add(link);           // Add it to the Set to mark it as seen\n        uniqueLinks.push(item);   // Add this element to the result array\n    }\n}\n\n// Return the deduplicated data\nreturn uniqueLinks;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1504,
+        452
+      ],
+      "id": "REDACTED",
+      "name": "Deduplicate Job Links (JS)"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        1728,
+        452
+      ],
+      "id": "REDACTED",
+      "name": "Limit Jobs (max 200 per day)"
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2176,
+        380
+      ],
+      "id": "REDACTED",
+      "name": "Iterate Job Links"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.links }}",
+        "options": {}
+      },
+      "id": "REDACTED",
+      "name": "Fetch Job Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        2400,
+        528
+      ],
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "maxTries": 5
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "title",
+              "cssSelector": "div h1"
+            },
+            {
+              "key": "company",
+              "cssSelector": "div span a"
+            },
+            {
+              "key": "location",
+              "cssSelector": "div span[class*='topcard__flavor topcard__flavor--bullet']"
+            },
+            {
+              "key": "description",
+              "cssSelector": "div.description__text.description__text--rich"
+            },
+            {
+              "key": "jobid",
+              "cssSelector": "a[data-item-type='semaphore']",
+              "returnValue": "attribute",
+              "attribute": "data-semaphore-content-urn"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "REDACTED",
+      "name": "Extract Job Attributes (HTML Parse)",
+      "type": "n8n-nodes-base.html",
+      "position": [
+        2624,
+        528
+      ],
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "REDACTED",
+              "name": "description",
+              "type": "string",
+              "value": "={{ $json.description.replaceAll(/\\s+/g, \" \") }}"
+            },
+            {
+              "id": "REDACTED",
+              "name": "jobid",
+              "type": "string",
+              "value": "={{ $json.jobid.split(\":\").last() }}"
+            },
+            {
+              "id": "REDACTED",
+              "name": "applyLink",
+              "type": "string",
+              "value": "={{ \"https://www.linkedin.com/jobs/view/\" + $json.jobid.split(\":\").pop().trim() }}"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "REDACTED",
+      "name": "Format Job Data",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        2912,
+        528
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": "REDACTED_URL",
+        "sheetName": {
+          "__rl": true,
+          "value": 1067999349,
+          "mode": "list",
+          "cachedResultName": "Result",
+          "cachedResultUrl": "REDACTED_URL"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "link": "={{ $('Format Job Data').item.json.applyLink }}",
+            "Title": "={{ $('Format Job Data').item.json.title }}",
+            "Company": "={{ $('Format Job Data').item.json.company }}",
+            "description": "={{ $('Format Job Data').item.json.description }}",
+            "Location": "={{ $('Format Job Data').item.json.location }}"
+          },
+          "matchingColumns": [
+            "link"
+          ],
+          "schema": [
+            {
+              "id": "REDACTED",
+              "displayName": "Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "REDACTED",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "REDACTED",
+              "displayName": "Location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "REDACTED",
+              "displayName": "link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "REDACTED",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "REDACTED",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "REDACTED",
+              "displayName": "Cover Letter",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "REDACTED",
+      "name": "Update Google Sheet (Job List)",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        3200,
+        600
+      ],
+      "typeVersion": 4.6,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REDACTED",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": "REDACTED_URL",
+        "sheetName": {
+          "__rl": true,
+          "value": 1067999349,
+          "mode": "list",
+          "cachedResultName": "Result",
+          "cachedResultUrl": "REDACTED_URL"
+        },
+        "options": {}
+      },
+      "id": "REDACTED",
+      "name": "Read Jobs from Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        2400,
+        232
+      ],
+      "typeVersion": 4.6,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REDACTED",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      allRows: items.map(item => item.json)\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2624,
+        232
+      ],
+      "id": "REDACTED",
+      "name": "Prepare AI Input (Format Data)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.output;\nconst cleaned = raw.replace(/```(?:json)?/g, \"\").trim();\nconst parsed = JSON.parse(cleaned);\nreturn parsed.map(obj => ({ json: obj }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3200,
+        232
+      ],
+      "id": "REDACTED",
+      "name": "Parse AI Output (to JSON)"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": "REDACTED_URL",
+        "sheetName": {
+          "__rl": true,
+          "value": 1067999349,
+          "mode": "list",
+          "cachedResultName": "Result",
+          "cachedResultUrl": "REDACTED_URL"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "score": "={{ $json.score }}",
+            "link": "={{ $json.link }}"
+          },
+          "matchingColumns": [
+            "link"
+          ],
+          "schema": [
+            {
+              "id": "REDACTED",
+              "displayName": "Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "REDACTED",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "REDACTED",
+              "displayName": "Location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "REDACTED",
+              "displayName": "link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "REDACTED",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "REDACTED",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "REDACTED",
+              "displayName": "Cover Letter",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "REDACTED",
+      "name": "Update Google Sheet (Job Results)",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        3424,
+        232
+      ],
+      "typeVersion": 4.6,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REDACTED",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "example@gmail.com",
+        "subject": "Your Job-Matching Report is Ready!",
+        "message": "=<div style=\"font-family: Arial, sans-serif; background-color: #f9fff9; border: 1px solid #d3e3d3; padding: 20px; border-radius: 8px;\">\n  <h2 style=\"color: #228B22;\">🌟 Your Job-Matching Report is Ready!</h2>\n  <p>Great news! I’ve just completed today’s LinkedIn job search for you 🔍</p>\n\n\n  <p style=\"margin-top:20px;\">Click below to check your updated results:</p>\n  <a href=\"https://docs.google.com/spreadsheets/d/10V_2mwCetqVRULSMRfxnp5B2neqIeVMPJC-CeBXWms4/edit?usp=sharing\"\n     style=\"background-color:#4CAF50;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;font-weight:bold;\">\n     📄 View My Google Sheet\n  </a>\n</div>\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        3648,
+        232
+      ],
+      "id": "REDACTED",
+      "name": "Send Summary Email (Job Update)",
+      "webhookId": "REDACTED",
+      "executeOnce": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REDACTED",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Output (to JSON)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Iterate Job Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Download Resume (from Google Drive)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Deduplicate Job Links (JS)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Resume (from Google Drive)": {
+      "main": [
+        [
+          {
+            "node": "Parse Resume (PDF → Text)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Resume (PDF → Text)": {
+      "main": [
+        [
+          {
+            "node": "Read Filters (from Google Sheet)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Filters (from Google Sheet)": {
+      "main": [
+        [
+          {
+            "node": "Build LinkedIn Search Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch LinkedIn Job Listings": {
+      "main": [
+        [
+          {
+            "node": "Extract Job URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build LinkedIn Search Query": {
+      "main": [
+        [
+          {
+            "node": "Fetch LinkedIn Job Listings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Job URLs": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplicate Job Links (JS)": {
+      "main": [
+        [
+          {
+            "node": "Limit Jobs (max 200 per day)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit Jobs (max 200 per day)": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Iterate Job Links": {
+      "main": [
+        [
+          {
+            "node": "Read Jobs from Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Job Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Job Details": {
+      "main": [
+        [
+          {
+            "node": "Extract Job Attributes (HTML Parse)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Job Attributes (HTML Parse)": {
+      "main": [
+        [
+          {
+            "node": "Format Job Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Job Data": {
+      "main": [
+        [
+          {
+            "node": "Update Google Sheet (Job List)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Google Sheet (Job List)": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Jobs from Google Sheet": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Input (Format Data)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Input (Format Data)": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Output (to JSON)": {
+      "main": [
+        [
+          {
+            "node": "Update Google Sheet (Job Results)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Google Sheet (Job Results)": {
+      "main": [
+        [
+          {
+            "node": "Send Summary Email (Job Update)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "REDACTED",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "REDACTED"
+  },
+  "id": "REDACTED",
+  "tags": [
+    {
+      "createdAt": "2025-11-05T11:07:37.615Z",
+      "updatedAt": "2025-11-05T11:07:37.615Z",
+      "id": "REDACTED",
+      "name": "LinkedIn"
+    },
+    {
+      "createdAt": "2025-11-05T11:07:37.608Z",
+      "updatedAt": "2025-11-05T11:07:37.608Z",
+      "id": "REDACTED",
+      "name": "Job Search"
+    }
+  ]
+}
